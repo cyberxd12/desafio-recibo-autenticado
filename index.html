@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rastro do Bem - Recibo Criptográfico</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 font-sans min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="bg-white shadow-xl rounded-2xl max-w-md w-full p-6 border border-slate-100">
+        <div class="text-center mb-6">
+            <div class="inline-flex p-3 bg-blue-50 rounded-full text-blue-600 mb-2">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+                </svg>
+            </div>
+            <h1 class="text-xl font-bold tracking-tight text-slate-900 uppercase">Rastro do Bem</h1>
+            <p class="text-xs text-slate-500 font-medium tracking-wide">Recibo Criptográfico Imutável</p>
+        </div>
+
+        <hr class="border-slate-100 mb-5">
+
+        <form id="receiptForm" class="space-y-4">
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Nome do Estabelecimento</label>
+                <input type="text" id="marketName" required placeholder="Ex: Mercado Sol Nascente" 
+                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition">
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold uppercase text-slate-500 mb-1">CNPJ</label>
+                <input type="text" id="cnpj" required placeholder="12.345.678/0001-90" maxlength="18"
+                    class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition">
+            </div>
+
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Data da Compra</label>
+                    <input type="date" id="purchaseDate" required 
+                        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold uppercase text-slate-500 mb-1">Valor da Compra (R$)</label>
+                    <input type="number" id="amount" step="0.01" required placeholder="150,00" 
+                        class="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 transition">
+                </div>
+            </div>
+
+            <button type="submit" 
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 px-4 rounded-lg text-sm shadow-sm hover:shadow transition-all duration-150">
+                CRIAR RECIBO AUTÊNTICO
+            </button>
+        </form>
+
+        <div id="resultArea" class="mt-6 pt-6 border-t border-dashed border-slate-200 hidden text-center animate-fade-in">
+            
+            <div class="mb-4 text-left bg-slate-50 p-3 rounded-lg border border-slate-100">
+                <span class="block text-[10px] font-bold uppercase text-slate-400 tracking-wider mb-1">HASH SHA-256 (Identificador Único)</span>
+                <p id="hashDisplay" class="text-[11px] font-mono text-slate-600 break-all bg-white p-2 border border-slate-200 rounded select-all"></p>
+            </div>
+
+            <div class="flex flex-col items-center justify-center p-4 bg-slate-50 rounded-lg border border-slate-100">
+                <div id="qrcode" class="p-2 bg-white rounded-md shadow-sm"></div>
+                <p class="text-[11px] text-emerald-600 font-semibold mt-3 uppercase tracking-wider flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Recibo Autêntico e Imutável
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Formata o CNPJ dinamicamente enquanto o usuário digita
+        document.getElementById('cnpj').addEventListener('input', function (e) {
+            let x = e.target.value.replace(/\D/g, '').match(/(\d{0,2})(\d{0,3})(\d{0,3})(\d{0,4})(\d{0,2})/);
+            e.target.value = !x[2] ? x[1] : x[1] + '.' + x[2] + '.' + x[3] + '/' + x[4] + (x[5] ? '-' + x[5] : '');
+        });
+
+        // Define a data de hoje como padrão no input date
+        document.getElementById('purchaseDate').valueAsDate = new Date();
+
+        // Instância global do QR Code para evitar duplicidade na renderização
+        let qrcodeInstance = null;
+
+        // Função assíncrona para gerar o hash SHA-256 usando a Web Crypto API
+        async function gerarHashSHA256(mensagem) {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(mensagem);
+            
+            // crypto.subtle.digest retorna uma Promise com o ArrayBuffer do hash
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            
+            // Converte o ArrayBuffer em string Hexadecimal
+            const hashArray = Array.from(new Uint8Array(hashBuffer));
+            const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+            return hashHex;
+        }
+
+        // Evento de submissão do formulário
+        document.getElementById('receiptForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            // Captura os valores dos campos
+            const nome = document.getElementById('marketName').value.trim();
+            const cnpj = document.getElementById('cnpj').value.trim();
+            const data = document.getElementById('purchaseDate').value;
+            const valor = parseFloat(document.getElementById('amount').value).toFixed(2);
+
+            // Concatena a string de dados que servirá como base para garantir a imutabilidade
+            // Padrão: CNPJ|DATA|VALOR|NOME
+            const stringDados = `${cnpj}|${data}|${valor}|${nome}`;
+
+            try {
+                // Gera o Hash criptográfico
+                const hashResultado = await gerarHashSHA256(stringDados);
+
+                // Exibe o Hash na tela
+                document.getElementById('hashDisplay').textContent = hashResultado;
+
+                // Limpa o QR Code anterior se existir
+                const qrContainer = document.getElementById('qrcode');
+                qrContainer.innerHTML = '';
+
+                // Cria o novo QR Code apontando para o conteúdo imutável
+                // Em um cenário real, você poderia passar uma URL de validação contendo o hash: https://exemplo.com/validar?hash=...
+                qrcodeInstance = new QRCode(qrContainer, {
+                    text: `DADOS DO RECIBO:\nEstabelecimento: ${nome}\nCNPJ: ${cnpj}\nData: ${data}\nValor: R$ ${valor}\n\nASSINATURA DIGITAL (HASH):\n${hashResultado}`,
+                    width: 160,
+                    height: 160,
+                    colorDark : "#0f172a",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.H
+                });
+
+                // Torna visível a seção de resposta
+                document.getElementById('resultArea').classList.remove('hidden');
+                
+            </div> catch (error) {
+                console.error("Erro ao gerar criptografia:", error);
+                alert("Ocorreu um erro ao processar a segurança criptográfica do recibo.");
+            }
+        });
+    </script>
+</body>
+</html>
